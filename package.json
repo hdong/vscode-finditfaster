@@ -37,7 +37,8 @@
     "onCommand:find-it-faster.findWithinFiles",
     "onCommand:find-it-faster.findWithinFilesWithType",
     "onCommand:find-it-faster.listSearchLocations",
-    "onCommand:find-it-faster.findTags"
+    "onCommand:find-it-faster.findTags",
+    "onCommand:find-it-faster.findBuffers"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -61,6 +62,10 @@
       {
         "command": "find-it-faster.findTags",
         "title": "Find It Faster: search tags"
+      },
+      {
+        "command": "find-it-faster.findBuffers",
+        "title": "Find It Faster: search open buffers"
       },
       {
         "command": "find-it-faster.listSearchLocations",

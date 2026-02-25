@@ -45,12 +45,6 @@ callfzf () {
         --hidden \
         ${USE_GITIGNORE_OPT[@]+"${USE_GITIGNORE_OPT[@]}"} \
         --glob '!**/.git/' \
-        --glob '!**/.cache/' \
-        --glob '!debug/' \
-        --glob '!release/' \
-        --glob '!compile_commands.json' \
-        --glob '!tags' \
-        --glob '!**/*.so*' \
         ${GLOBS[@]+"${GLOBS[@]}"} \
         ${TYPE_FILTER_ARR[@]+"${TYPE_FILTER_ARR[@]}"} \
         ${PATHS[@]+"${PATHS[@]}"} \

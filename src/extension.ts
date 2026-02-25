@@ -75,6 +75,12 @@ const commands: { [key: string]: Command } = {
         preRunCallback: undefined,
         postRunCallback: undefined,
     },
+    findBuffers: {
+        script: 'find_buffers',
+        uri: undefined,
+        preRunCallback: writeBuffersFile,
+        postRunCallback: undefined,
+    },
     resumeSearch: {
         script: 'resume_search', // Dummy. We will set the uri from the last-run script. But we will use this value to check whether we are resuming.
         uri: undefined,
@@ -189,6 +195,7 @@ interface Config {
     selectionFile: string,
     lastQueryFile: string,
     lastPosFile: string,
+    buffersFile: string,
     hideTerminalAfterSuccess: boolean,
     hideTerminalAfterFail: boolean,
     clearTerminalAfterUse: boolean,
@@ -233,6 +240,7 @@ const CFG: Config = {
     selectionFile: '',
     lastQueryFile: '',
     lastPosFile: '',
+    buffersFile: '',
     hideTerminalAfterSuccess: false,
     hideTerminalAfterFail: false,
     clearTerminalAfterUse: false,
@@ -274,6 +282,7 @@ function setupConfig(context: vscode.ExtensionContext) {
     commands.findWithinFiles.uri = localScript(commands.findWithinFiles.script);
     commands.findWithinFilesWithType.uri = localScript(commands.findWithinFiles.script);
     commands.findTags.uri = localScript(commands.findTags.script);
+    commands.findBuffers.uri = localScript(commands.findBuffers.script);
     commands.listSearchLocations.uri = localScript(commands.listSearchLocations.script);
     commands.flightCheck.uri = localScript(commands.flightCheck.script);
 }
@@ -460,6 +469,19 @@ function explainSearchLocations(useColor = false) {
     return ret;
 }
 
+function writeBuffersFile() {
+    const buffers: string[] = [];
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            if (tab.input instanceof vscode.TabInputText) {
+                buffers.push(tab.input.uri.fsPath);
+            }
+        }
+    }
+    fs.writeFileSync(CFG.buffersFile, buffers.join('\n'));
+    return true;
+}
+
 function writePathOriginsFile() {
     fs.writeFileSync(path.join(CFG.tempDir, 'paths_explain'), explainSearchLocations(os.platform() !== 'win32'));
     return true;
@@ -564,6 +586,7 @@ function reinitialize() {
     CFG.selectionFile = path.join(CFG.tempDir, 'selection');
     CFG.lastQueryFile = path.join(CFG.tempDir, 'last_query');
     CFG.lastPosFile = path.join(CFG.tempDir, 'last_position');
+    CFG.buffersFile = path.join(CFG.tempDir, 'buffers');
     fs.writeFileSync(CFG.canaryFile, '');
     fs.watch(CFG.canaryFile, (eventType) => {
         if (eventType === 'change') {
@@ -701,6 +724,7 @@ function createTerminal() {
             SELECTION_FILE: CFG.selectionFile,
             LAST_QUERY_FILE: CFG.lastQueryFile,
             LAST_POS_FILE: CFG.lastPosFile,
+            BUFFERS_FILE: CFG.buffersFile,
             EXPLAIN_FILE: path.join(CFG.tempDir, 'paths_explain'),
             BAT_THEME: CFG.batTheme,
             FUZZ_RG_QUERY: CFG.fuzzRipgrepQuery ? '1' : '0',
@@ -730,7 +754,8 @@ function getCommandString(cmd: Command, withArgs: boolean = true, withTextSelect
     let ret = '';
     const cmdPath = cmd.uri.fsPath;
     if (queryString !== undefined && queryString !== '') {
-        ret += envVarToString('PREFILL_QUERY', `'${queryString}'`);
+        const escaped = queryString.replace(/'/g, "'\\''");
+        ret += envVarToString('PREFILL_QUERY', `'${escaped}'`);
     } else if (CFG.useEditorSelectionAsQuery && withTextSelection) {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
