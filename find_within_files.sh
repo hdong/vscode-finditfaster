@@ -41,6 +41,7 @@ PREVIEW_WINDOW=${FIND_WITHIN_FILES_PREVIEW_WINDOW_CONFIG:-'right:border-left:50%
 HAS_SELECTION=${HAS_SELECTION:-}
 RESUME_SEARCH=${RESUME_SEARCH:-}
 FUZZ_RG_QUERY=${FUZZ_RG_QUERY:-}
+PREFILL_QUERY=${PREFILL_QUERY:-}
 # We match against the beginning of the line so everything matches but nothing gets highlighted...
 QUERY='^'
 INITIAL_QUERY=''  # Don't show initial "^" regex in fzf
@@ -56,6 +57,9 @@ if [[ "$RESUME_SEARCH" -eq 1 ]]; then
             INITIAL_POS="$pos"
         fi
     fi
+elif [[ -n "$PREFILL_QUERY" ]]; then
+    # ... or pre-fill fzf query (client-side filtering, no rg reload on change)
+    INITIAL_QUERY="$PREFILL_QUERY"
 elif [[ "$HAS_SELECTION" -eq 1 ]]; then
     # ... or against the selection if we have one
     QUERY="$(cat "$SELECTION_FILE")"
@@ -103,6 +107,19 @@ echo "$RG_PREFIX_STR"
 # -a: array
 # Quick note on ${PREVIEW_STR[@]+"${PREVIEW_STR[@]}"}: Don't ask.
 # https://stackoverflow.com/q/7577052/888916
+if [[ -n "$PREFILL_QUERY" ]]; then
+IFS=: read -ra VAL < <(
+  FZF_DEFAULT_COMMAND="$FZF_CMD" \
+  fzf --ansi \
+      --cycle \
+      --delimiter : \
+      --history $LAST_QUERY_FILE \
+      --bind "enter:execute(echo {n} > $LAST_POS_FILE)+accept" \
+      --bind "$RESUME_POS_BINDING" \
+      --query "$INITIAL_QUERY" \
+      ${PREVIEW_STR[@]+"${PREVIEW_STR[@]}"} \
+)
+else
 IFS=: read -ra VAL < <(
   FZF_DEFAULT_COMMAND="$FZF_CMD" \
   fzf --ansi \
@@ -115,6 +132,7 @@ IFS=: read -ra VAL < <(
       --phony --query "$INITIAL_QUERY" \
       ${PREVIEW_STR[@]+"${PREVIEW_STR[@]}"} \
 )
+fi
 # Output is filename, line number, character, contents
 
 if [[ ${#VAL[@]} -eq 0 ]]; then

@@ -36,7 +36,8 @@
     "onCommand:find-it-faster.findFilesWithType",
     "onCommand:find-it-faster.findWithinFiles",
     "onCommand:find-it-faster.findWithinFilesWithType",
-    "onCommand:find-it-faster.listSearchLocations"
+    "onCommand:find-it-faster.listSearchLocations",
+    "onCommand:find-it-faster.findTags"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -56,6 +57,10 @@
       {
         "command": "find-it-faster.findWithinFilesWithType",
         "title": "Find It Faster: search within files (with type filter)"
+      },
+      {
+        "command": "find-it-faster.findTags",
+        "title": "Find It Faster: search tags"
       },
       {
         "command": "find-it-faster.listSearchLocations",

@@ -69,6 +69,12 @@ const commands: { [key: string]: Command } = {
         preRunCallback: undefined,
         postRunCallback: undefined,
     },
+    findTags: {
+        script: 'find_tags',
+        uri: undefined,
+        preRunCallback: undefined,
+        postRunCallback: undefined,
+    },
     resumeSearch: {
         script: 'resume_search', // Dummy. We will set the uri from the last-run script. But we will use this value to check whether we are resuming.
         uri: undefined,
@@ -267,6 +273,7 @@ function setupConfig(context: vscode.ExtensionContext) {
     commands.findFilesWithType.uri = localScript(commands.findFiles.script);
     commands.findWithinFiles.uri = localScript(commands.findWithinFiles.script);
     commands.findWithinFilesWithType.uri = localScript(commands.findWithinFiles.script);
+    commands.findTags.uri = localScript(commands.findTags.script);
     commands.listSearchLocations.uri = localScript(commands.listSearchLocations.script);
     commands.flightCheck.uri = localScript(commands.flightCheck.script);
 }
@@ -274,8 +281,8 @@ function setupConfig(context: vscode.ExtensionContext) {
 /** Register the commands we defined with VS Code so users have access to them */
 function registerCommands() {
     Object.keys(commands).map((k) => {
-        vscode.commands.registerCommand(`${CFG.extensionName}.${k}`, () => {
-            executeTerminalCommand(k);
+        vscode.commands.registerCommand(`${CFG.extensionName}.${k}`, (args?: { query?: string }) => {
+            executeTerminalCommand(k, args?.query);
         });
     });
 }
@@ -333,8 +340,8 @@ function updateConfigWithUserSettings() {
     CFG.killTerminalAfterUse = getCFG('general.killTerminalAfterUse');
     CFG.showMaximizedTerminal = getCFG('general.showMaximizedTerminal');
     CFG.batTheme = getCFG('general.batTheme');
-    CFG.openFileInPreviewEditor = getCFG('general.openFileInPreviewEditor'),
-        CFG.findFilesPreviewEnabled = getCFG('findFiles.showPreview');
+    CFG.openFileInPreviewEditor = getCFG('general.openFileInPreviewEditor');
+    CFG.findFilesPreviewEnabled = getCFG('findFiles.showPreview');
     CFG.findFilesPreviewCommand = getCFG('findFiles.previewCommand');
     CFG.findFilesPreviewWindowConfig = getCFG('findFiles.previewWindowConfig');
     CFG.findWithinFilesPreviewEnabled = getCFG('findWithinFiles.showPreview');
@@ -718,11 +725,13 @@ function getWorkspaceFoldersAsString() {
     return CFG.searchPaths.reduce((x, y) => x + ` '${y}'`, '');
 }
 
-function getCommandString(cmd: Command, withArgs: boolean = true, withTextSelection: boolean = true) {
+function getCommandString(cmd: Command, withArgs: boolean = true, withTextSelection: boolean = true, queryString?: string) {
     assert(cmd.uri);
     let ret = '';
     const cmdPath = cmd.uri.fsPath;
-    if (CFG.useEditorSelectionAsQuery && withTextSelection) {
+    if (queryString !== undefined && queryString !== '') {
+        ret += envVarToString('PREFILL_QUERY', `'${queryString}'`);
+    } else if (CFG.useEditorSelectionAsQuery && withTextSelection) {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
             const selection = editor.selection;
@@ -777,7 +786,7 @@ function getIgnoreString() {
     return globs.reduce((x, y) => x + `${y}:`, '');
 }
 
-async function executeTerminalCommand(cmd: string) {
+async function executeTerminalCommand(cmd: string, queryString?: string) {
     getIgnoreGlobs();
     if (!CFG.flightCheckPassed && !CFG.disableStartupChecks) {
         if (!reinitialize()) {
@@ -815,7 +824,7 @@ async function executeTerminalCommand(cmd: string) {
     let cbResult = true;
     if (cb !== undefined) { cbResult = await cb(); }
     if (cbResult === true) {
-        term.sendText(getCommandString(commands[cmd]));
+        term.sendText(getCommandString(commands[cmd], true, true, queryString));
         if (CFG.showMaximizedTerminal) {
             vscode.commands.executeCommand('workbench.action.toggleMaximizedPanel');
         }
