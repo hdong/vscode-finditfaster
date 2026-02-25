@@ -196,6 +196,7 @@ interface Config {
     lastQueryFile: string,
     lastPosFile: string,
     buffersFile: string,
+    closeBufferFile: string,
     hideTerminalAfterSuccess: boolean,
     hideTerminalAfterFail: boolean,
     clearTerminalAfterUse: boolean,
@@ -241,6 +242,7 @@ const CFG: Config = {
     lastQueryFile: '',
     lastPosFile: '',
     buffersFile: '',
+    closeBufferFile: '',
     hideTerminalAfterSuccess: false,
     hideTerminalAfterFail: false,
     clearTerminalAfterUse: false,
@@ -587,7 +589,18 @@ function reinitialize() {
     CFG.lastQueryFile = path.join(CFG.tempDir, 'last_query');
     CFG.lastPosFile = path.join(CFG.tempDir, 'last_position');
     CFG.buffersFile = path.join(CFG.tempDir, 'buffers');
+    CFG.closeBufferFile = path.join(CFG.tempDir, 'close_buffer');
     fs.writeFileSync(CFG.canaryFile, '');
+    fs.writeFileSync(CFG.closeBufferFile, '');
+    fs.watch(CFG.closeBufferFile, (eventType) => {
+        if (eventType === 'change') {
+            fs.readFile(CFG.closeBufferFile, { encoding: 'utf-8' }, (err, data) => {
+                if (!err && data.length > 0) {
+                    closeBuffers(data);
+                }
+            });
+        }
+    });
     fs.watch(CFG.canaryFile, (eventType) => {
         if (eventType === 'change') {
             handleCanaryFileChange();
@@ -596,6 +609,22 @@ function reinitialize() {
         }
     });
     return true;
+}
+
+/** Close open editor tabs by file path */
+function closeBuffers(data: string) {
+    const filePaths = data.split('\n')
+        .filter(s => s !== '')
+        .map(s => s.replace(/^close:/, '').trim());
+    for (const filePath of filePaths) {
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                if (tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === filePath) {
+                    vscode.window.tabGroups.close(tab);
+                }
+            }
+        }
+    }
 }
 
 /** Interpreting the terminal output and turning them into a vscode command */
@@ -725,6 +754,7 @@ function createTerminal() {
             LAST_QUERY_FILE: CFG.lastQueryFile,
             LAST_POS_FILE: CFG.lastPosFile,
             BUFFERS_FILE: CFG.buffersFile,
+            CLOSE_BUFFER_FILE: CFG.closeBufferFile,
             EXPLAIN_FILE: path.join(CFG.tempDir, 'paths_explain'),
             BAT_THEME: CFG.batTheme,
             FUZZ_RG_QUERY: CFG.fuzzRipgrepQuery ? '1' : '0',

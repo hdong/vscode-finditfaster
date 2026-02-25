@@ -36,17 +36,31 @@ if [[ -z "$BUFFERS_FILE" || ! -f "$BUFFERS_FILE" ]]; then
     exit 1
 fi
 
-# Strip workspace root to show relative paths in fzf
+CLOSE_BUFFER_FILE=${CLOSE_BUFFER_FILE:-''}
+WORKING_FILE=$(mktemp)
+trap "rm -f '$WORKING_FILE'" EXIT
+
+# Build display list (relative paths) in a working file
 if [[ -n "$WORKSPACE_ROOT" ]]; then
-    DISPLAY_LIST=$(sed "s|^${WORKSPACE_ROOT}/||" "$BUFFERS_FILE")
+    sed "s|^${WORKSPACE_ROOT}/||" "$BUFFERS_FILE" > "$WORKING_FILE"
 else
-    DISPLAY_LIST=$(cat "$BUFFERS_FILE")
+    cp "$BUFFERS_FILE" "$WORKING_FILE"
 fi
 
-VAL=$(echo "$DISPLAY_LIST" \
+# ctrl-x: write absolute path to CLOSE_BUFFER_FILE (extension closes tab),
+#          remove from working file, reload fzf — all without exiting fzf.
+if [[ -n "$WORKSPACE_ROOT" ]]; then
+    CLOSE_CMD="echo ${WORKSPACE_ROOT}/{} > $CLOSE_BUFFER_FILE; sed -i '\\|^{}$|d' $WORKING_FILE"
+else
+    CLOSE_CMD="echo {} > $CLOSE_BUFFER_FILE; sed -i '\\|^{}$|d' $WORKING_FILE"
+fi
+
+VAL=$(cat "$WORKING_FILE" \
     | fzf \
         --cycle \
         --multi \
+        --header 'Enter: open | Ctrl-x: close buffer' \
+        --bind "ctrl-x:execute-silent($CLOSE_CMD)+reload(cat $WORKING_FILE)" \
         ${PREVIEW_STR[@]+"${PREVIEW_STR[@]}"}
 )
 
@@ -56,7 +70,6 @@ if [[ -z "$VAL" ]]; then
     exit 1
 else
     if [[ -n "$WORKSPACE_ROOT" ]]; then
-        # Prepend workspace root back for absolute paths
         TMP=$(mktemp)
         echo "$VAL" > "$TMP"
         sed "s|^|$WORKSPACE_ROOT/|" "$TMP" > "$CANARY_FILE"
