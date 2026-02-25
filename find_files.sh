@@ -43,7 +43,7 @@ callfzf () {
     rg \
         --files \
         --hidden \
-        $(array_join ${USE_GITIGNORE_OPT+"${USE_GITIGNORE_OPT[@]}"}) \
+        ${USE_GITIGNORE_OPT[@]+"${USE_GITIGNORE_OPT[@]}"} \
         --glob '!**/.git/' \
         --glob '!**/.cache/' \
         --glob '!debug/' \
