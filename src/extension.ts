@@ -29,7 +29,7 @@ let isExtensionChangedTerminal = false;
 interface Command {
     script: string,
     uri: vscode.Uri | undefined,
-    preRunCallback: undefined | (() => boolean | Promise<boolean>),
+    preRunCallback: undefined | ((queryString?: string) => boolean | Promise<boolean>),
     postRunCallback: undefined | (() => void),
 }
 const commands: { [key: string]: Command } = {
@@ -74,6 +74,21 @@ const commands: { [key: string]: Command } = {
         uri: undefined,
         preRunCallback: undefined,
         postRunCallback: undefined,
+    },
+    findWithinFilesFilter: {
+        script: 'find_within_files_filter',
+        uri: undefined,
+        preRunCallback: (q?: string) => promptRgPattern(q),
+        postRunCallback: undefined,
+    },
+    findWithinFilesFilterWithType: {
+        script: 'find_within_files_filter',
+        uri: undefined,
+        preRunCallback: async (q?: string) => {
+            if (!await promptRgPattern(q)) { return false; }
+            return selectTypeFilter();
+        },
+        postRunCallback: () => { CFG.useTypeFilter = false; },
     },
     findBuffers: {
         script: 'find_buffers',
@@ -197,6 +212,7 @@ interface Config {
     lastPosFile: string,
     buffersFile: string,
     closeBufferFile: string,
+    rgPatternFile: string,
     hideTerminalAfterSuccess: boolean,
     hideTerminalAfterFail: boolean,
     clearTerminalAfterUse: boolean,
@@ -243,6 +259,7 @@ const CFG: Config = {
     lastPosFile: '',
     buffersFile: '',
     closeBufferFile: '',
+    rgPatternFile: '',
     hideTerminalAfterSuccess: false,
     hideTerminalAfterFail: false,
     clearTerminalAfterUse: false,
@@ -284,6 +301,8 @@ function setupConfig(context: vscode.ExtensionContext) {
     commands.findWithinFiles.uri = localScript(commands.findWithinFiles.script);
     commands.findWithinFilesWithType.uri = localScript(commands.findWithinFiles.script);
     commands.findTags.uri = localScript(commands.findTags.script);
+    commands.findWithinFilesFilter.uri = localScript(commands.findWithinFilesFilter.script);
+    commands.findWithinFilesFilterWithType.uri = localScript(commands.findWithinFilesFilter.script);
     commands.findBuffers.uri = localScript(commands.findBuffers.script);
     commands.listSearchLocations.uri = localScript(commands.listSearchLocations.script);
     commands.flightCheck.uri = localScript(commands.flightCheck.script);
@@ -471,6 +490,21 @@ function explainSearchLocations(useColor = false) {
     return ret;
 }
 
+async function promptRgPattern(queryString?: string): Promise<boolean> {
+    let pattern = queryString;
+    if (pattern === undefined || pattern === '') {
+        pattern = await vscode.window.showInputBox({
+            prompt: 'Enter ripgrep search pattern (regex)',
+            placeHolder: 'e.g. TODO|FIXME',
+        });
+    }
+    if (pattern === undefined) {
+        return false;  // user pressed Escape
+    }
+    fs.writeFileSync(CFG.rgPatternFile, pattern);
+    return true;
+}
+
 function writeBuffersFile() {
     const buffers: string[] = [];
     for (const group of vscode.window.tabGroups.all) {
@@ -590,6 +624,7 @@ function reinitialize() {
     CFG.lastPosFile = path.join(CFG.tempDir, 'last_position');
     CFG.buffersFile = path.join(CFG.tempDir, 'buffers');
     CFG.closeBufferFile = path.join(CFG.tempDir, 'close_buffer');
+    CFG.rgPatternFile = path.join(CFG.tempDir, 'rg_pattern');
     fs.writeFileSync(CFG.canaryFile, '');
     fs.writeFileSync(CFG.closeBufferFile, '');
     fs.watch(CFG.closeBufferFile, (eventType) => {
@@ -755,6 +790,7 @@ function createTerminal() {
             LAST_POS_FILE: CFG.lastPosFile,
             BUFFERS_FILE: CFG.buffersFile,
             CLOSE_BUFFER_FILE: CFG.closeBufferFile,
+            RG_PATTERN_FILE: CFG.rgPatternFile,
             EXPLAIN_FILE: path.join(CFG.tempDir, 'paths_explain'),
             BAT_THEME: CFG.batTheme,
             FUZZ_RG_QUERY: CFG.fuzzRipgrepQuery ? '1' : '0',
@@ -877,7 +913,7 @@ async function executeTerminalCommand(cmd: string, queryString?: string) {
     assert(cmd in commands);
     const cb = commands[cmd].preRunCallback;
     let cbResult = true;
-    if (cb !== undefined) { cbResult = await cb(); }
+    if (cb !== undefined) { cbResult = await cb(queryString); }
     if (cbResult === true) {
         term.sendText(getCommandString(commands[cmd], true, true, queryString));
         if (CFG.showMaximizedTerminal) {
